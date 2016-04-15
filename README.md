@@ -157,10 +157,10 @@ godocs for a lot of more examples and different uses.
 JSON support
 
 To use `json` struct tag names instead of the struct field name, set
-`validator.ReadJSONTag = true`.
+`validator.SetReadJSONTag(true)`.
 
     func init() {
-        validator.ReadJSONTag = true
+        validator.SetReadJSONTag(true)
     }
 
     type Foo stuct {

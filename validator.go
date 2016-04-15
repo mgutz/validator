@@ -26,7 +26,7 @@ import (
 )
 
 // ReadJSONTag indicates whether to use json tags for map key names
-var ReadJSONTag = false
+var readJSONTag = false
 
 // Ampersand escape sequence
 const Ampersand = "%26"
@@ -46,6 +46,16 @@ const Percent = "%25"
 // formats like json, msgpack etc.
 type TextErr struct {
 	Err error
+}
+
+// SetReadJSONTag enables the use of json struct tags for field names.
+func SetReadJSONTag(enable bool) {
+	readJSONTag = enable
+}
+
+// GetReadJSONTag returns the value of the readJSONTag indicator.
+func GetReadJSONTag() bool {
+	return readJSONTag
 }
 
 // Error implements the error interface.
@@ -261,7 +271,7 @@ func (mv *Validator) Validate(v interface{}) error {
 			continue
 		}
 		fname := st.Field(i).Name
-		if ReadJSONTag {
+		if readJSONTag {
 			tag := st.Field(i).Tag.Get("json")
 			if tag == "-" {
 				continue

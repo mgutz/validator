@@ -451,10 +451,8 @@ func TestReadJSONTag(t *testing.T) {
 
 // wrapReadJSON ensures ReadJSONTag is set then cleared around the lambda
 func wrapReadJSON(fn func()) {
-	validator.ReadJSONTag = true
-	defer func() {
-		validator.ReadJSONTag = false
-	}()
+	validator.SetReadJSONTag(true)
+	defer validator.SetReadJSONTag(false)
 	fn()
 }
 
