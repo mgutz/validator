@@ -13,15 +13,16 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package validator_test
 
 import (
+	"encoding/json"
 	"testing"
 
-	. "gopkg.in/check.v1"
-	"gopkg.in/validator.v2"
 	"reflect"
+
+	. "gopkg.in/check.v1"
+	"gopkg.in/mgutz/validator.v2"
 )
 
 func Test(t *testing.T) {
@@ -33,16 +34,18 @@ type MySuite struct{}
 var _ = Suite(&MySuite{})
 
 type Simple struct {
-	A int `validate:"min=10"`
+	A int `validate:"min?10"`
+	B int `validate:"nonzero?err=is required" json:"b"`
+	C int `validate:"nonzero" json:"-"`
 }
 
 type TestStruct struct {
 	A   int    `validate:"nonzero"`
-	B   string `validate:"len=8,min=6,max=4"`
+	B   string `validate:"len?8,min?6,max?4"`
 	Sub struct {
 		A int `validate:"nonzero"`
 		B string
-		C float64 `validate:"nonzero,min=1"`
+		C float64 `validate:"nonzero,min?1"`
 		D *string `validate:"nonzero"`
 	}
 	D *Simple `validate:"nonzero"`
@@ -56,7 +59,7 @@ func (ms *MySuite) TestValidate(c *C) {
 	t.Sub.A = 1
 	t.Sub.B = ""
 	t.Sub.C = 0.0
-	t.D = &Simple{10}
+	t.D = &Simple{A: 10}
 
 	err := validator.Validate(t)
 	c.Assert(err, NotNil)
@@ -85,7 +88,7 @@ func (ms *MySuite) TestValidSlice(c *C) {
 		s = append(s, i)
 	}
 
-	err = validator.Valid(s, "min=11,max=5,len=9,nonzero")
+	err = validator.Valid(s, "min?11,max?5,len?9,nonzero")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
@@ -103,20 +106,20 @@ func (ms *MySuite) TestValidMap(c *C) {
 	c.Assert(ok, Equals, true)
 	c.Assert(errs, HasError, validator.ErrZeroValue)
 
-	err = validator.Valid(m, "min=1")
+	err = validator.Valid(m, "min?1")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
 	c.Assert(errs, HasError, validator.ErrMin)
 
 	m = map[string]string{"A": "a", "B": "a"}
-	err = validator.Valid(m, "max=1")
+	err = validator.Valid(m, "max?1")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
 	c.Assert(errs, HasError, validator.ErrMax)
 
-	err = validator.Valid(m, "min=2, max=5")
+	err = validator.Valid(m, "min?2, max?5")
 	c.Assert(err, IsNil)
 
 	m = map[string]string{
@@ -126,7 +129,7 @@ func (ms *MySuite) TestValidMap(c *C) {
 		"4": "d",
 		"5": "e",
 	}
-	err = validator.Valid(m, "len=4,min=6,max=1,nonzero")
+	err = validator.Valid(m, "len?4,min?6,max?1,nonzero")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
@@ -153,17 +156,17 @@ func (ms *MySuite) TestValidInt(c *C) {
 	err := validator.Valid(i, "nonzero")
 	c.Assert(err, IsNil)
 
-	err = validator.Valid(i, "min=1")
+	err = validator.Valid(i, "min?1")
 	c.Assert(err, IsNil)
 
-	err = validator.Valid(i, "min=124, max=122")
+	err = validator.Valid(i, "min?124, max?122")
 	c.Assert(err, NotNil)
 	errs, ok := err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
 	c.Assert(errs, HasError, validator.ErrMin)
 	c.Assert(errs, HasError, validator.ErrMax)
 
-	err = validator.Valid(i, "max=10")
+	err = validator.Valid(i, "max?10")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
@@ -172,22 +175,22 @@ func (ms *MySuite) TestValidInt(c *C) {
 
 func (ms *MySuite) TestValidString(c *C) {
 	s := "test1234"
-	err := validator.Valid(s, "len=8")
+	err := validator.Valid(s, "len?8")
 	c.Assert(err, IsNil)
 
-	err = validator.Valid(s, "len=0")
+	err = validator.Valid(s, "len?0")
 	c.Assert(err, NotNil)
 	errs, ok := err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
 	c.Assert(errs, HasError, validator.ErrLen)
 
-	err = validator.Valid(s, "regexp=^[tes]{4}.*")
+	err = validator.Valid(s, "regexp?^[tes]{4}.*")
 	c.Assert(err, IsNil)
 
-	err = validator.Valid(s, "regexp=^.*[0-9]{5}$")
+	err = validator.Valid(s, "regexp?^.*[0-9]{5}$")
 	c.Assert(errs, NotNil)
 
-	err = validator.Valid("", "nonzero,len=3,max=1")
+	err = validator.Valid("", "nonzero,len?3,max?1")
 	c.Assert(err, NotNil)
 	errs, ok = err.(validator.ErrorArray)
 	c.Assert(ok, Equals, true)
@@ -199,7 +202,7 @@ func (ms *MySuite) TestValidString(c *C) {
 
 func (ms *MySuite) TestValidateStructVar(c *C) {
 	// just verifies that a the given val is a struct
-	validator.SetValidationFunc("struct", func(val interface{}, _ string) error {
+	validator.SetValidationFunc("struct", func(val interface{}, _ map[string]string) error {
 		v := reflect.ValueOf(val)
 		if v.Kind() == reflect.Struct {
 			return nil
@@ -237,14 +240,14 @@ func (ms *MySuite) TestValidateStructVar(c *C) {
 
 func (ms *MySuite) TestValidatePointerVar(c *C) {
 	// just verifies that a the given val is a struct
-	validator.SetValidationFunc("struct", func(val interface{}, _ string) error {
+	validator.SetValidationFunc("struct", func(val interface{}, _ map[string]string) error {
 		v := reflect.ValueOf(val)
 		if v.Kind() == reflect.Struct {
 			return nil
 		}
 		return validator.ErrUnsupported
 	})
-	validator.SetValidationFunc("nil", func(val interface{}, _ string) error {
+	validator.SetValidationFunc("nil", func(val interface{}, _ map[string]string) error {
 		v := reflect.ValueOf(val)
 		if v.IsNil() {
 			return nil
@@ -302,7 +305,7 @@ func (ms *MySuite) TestValidatePointerVar(c *C) {
 
 func (ms *MySuite) TestValidateOmittedStructVar(c *C) {
 	type test2 struct {
-		B int `validate:"min=1"`
+		B int `validate:"min?1"`
 	}
 	type test1 struct {
 		A test2 `validate:"-"`
@@ -331,8 +334,8 @@ func (ms *MySuite) TestUnknownTag(c *C) {
 
 func (ms *MySuite) TestUnsupported(c *C) {
 	type test struct {
-		A int     `validate:"regexp=a.*b"`
-		B float64 `validate:"regexp=.*"`
+		A int     `validate:"regexp?a.*b"`
+		B float64 `validate:"regexp?.*"`
 	}
 	t := test{}
 	err := validator.Validate(t)
@@ -346,9 +349,9 @@ func (ms *MySuite) TestUnsupported(c *C) {
 
 func (ms *MySuite) TestBadParameter(c *C) {
 	type test struct {
-		A string `validate:"min="`
-		B string `validate:"len=="`
-		C string `validate:"max=foo"`
+		A string `validate:"min?"`
+		B string `validate:"len?="`
+		C string `validate:"max?foo"`
 	}
 	t := test{}
 	err := validator.Validate(t)
@@ -359,6 +362,18 @@ func (ms *MySuite) TestBadParameter(c *C) {
 	c.Assert(errs["A"], HasError, validator.ErrBadParameter)
 	c.Assert(errs["B"], HasError, validator.ErrBadParameter)
 	c.Assert(errs["C"], HasError, validator.ErrBadParameter)
+}
+
+func (ms *MySuite) TestCustomError(c *C) {
+	type test struct {
+		A string `validate:"max?3&err=doh!"`
+	}
+	t := test{"four"}
+	err := validator.Validate(t)
+	c.Assert(err, NotNil)
+	errs, ok := err.(validator.ErrorMap)
+	c.Assert(ok, Equals, true)
+	c.Assert(errs["A"].Error(), Equals, "doh!")
 }
 
 type hasErrorChecker struct {
@@ -393,3 +408,68 @@ func (c *hasErrorChecker) Info() *CheckerInfo {
 }
 
 var HasError = &hasErrorChecker{&CheckerInfo{Name: "HasError", Params: []string{"HasError", "expected to contain"}}}
+
+func TestReadJSONTag(t *testing.T) {
+
+	validObj := &Simple{
+		A: 11,
+		B: 1,
+		C: 2,
+	}
+
+	err := validator.Validate(validObj)
+	if err != nil {
+		t.Fail()
+	}
+
+	wrapReadJSON(func() {
+		invalidB := Simple{
+			A: 11,
+			C: 2,
+		}
+
+		if err := validator.Validate(&invalidB); err != nil {
+			if err.Error() != "b: is required" {
+				t.Fail()
+			}
+		}
+	})
+
+	wrapReadJSON(func() {
+		ignoreC := Simple{
+			A: 11,
+			B: 1,
+			C: 2,
+		}
+
+		if err := validator.Validate(&ignoreC); err != nil {
+			t.Fail()
+		}
+	})
+
+}
+
+// wrapReadJSON ensures ReadJSONTag is set then cleared around the lambda
+func wrapReadJSON(fn func()) {
+	validator.ReadJSONTag = true
+	defer func() {
+		validator.ReadJSONTag = false
+	}()
+	fn()
+}
+
+func TestErrorShouldJSON(t *testing.T) {
+	wrapReadJSON(func() {
+		multiErrors := Simple{
+			A: 9,
+			B: 0,
+			C: 0,
+		}
+
+		err := validator.Validate(&multiErrors)
+		b, _ := json.Marshal(err)
+		if string(b) != `{"A":["less than min"],"b":["is required"]}` {
+			t.Fail()
+		}
+	})
+}

@@ -13,7 +13,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package validator
 
 import (
@@ -24,7 +23,7 @@ import (
 
 // nonzero tests whether a variable value non-zero
 // as defined by the golang spec.
-func nonzero(v interface{}, param string) error {
+func nonzero(v interface{}, param map[string]string) error {
 	st := reflect.ValueOf(v)
 	valid := true
 	switch st.Kind() {
@@ -59,36 +58,36 @@ func nonzero(v interface{}, param string) error {
 // length tests whether a variable's length is equal to a given
 // value. For strings it tests the number of characters whereas
 // for maps and slices it tests the number of items.
-func length(v interface{}, param string) error {
+func length(v interface{}, param map[string]string) error {
 	st := reflect.ValueOf(v)
 	valid := true
 	switch st.Kind() {
 	case reflect.String:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		valid = int64(len(st.String())) == p
 	case reflect.Slice, reflect.Map, reflect.Array:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		valid = int64(st.Len()) == p
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		valid = st.Int() == p
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		p, err := asUint(param)
+		p, err := asUint(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		valid = st.Uint() == p
 	case reflect.Float32, reflect.Float64:
-		p, err := asFloat(param)
+		p, err := asFloat(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
@@ -106,36 +105,36 @@ func length(v interface{}, param string) error {
 // number. For number types, it's a simple lesser-than test; for
 // strings it tests the number of characters whereas for maps
 // and slices it tests the number of items.
-func min(v interface{}, param string) error {
+func min(v interface{}, param map[string]string) error {
 	st := reflect.ValueOf(v)
 	invalid := false
 	switch st.Kind() {
 	case reflect.String:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = int64(len(st.String())) < p
 	case reflect.Slice, reflect.Map, reflect.Array:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = int64(st.Len()) < p
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = st.Int() < p
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		p, err := asUint(param)
+		p, err := asUint(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = st.Uint() < p
 	case reflect.Float32, reflect.Float64:
-		p, err := asFloat(param)
+		p, err := asFloat(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
@@ -153,36 +152,36 @@ func min(v interface{}, param string) error {
 // value. For numbers, it's a simple lesser-than test; for
 // strings it tests the number of characters whereas for maps
 // and slices it tests the number of items.
-func max(v interface{}, param string) error {
+func max(v interface{}, param map[string]string) error {
 	st := reflect.ValueOf(v)
 	var invalid bool
 	switch st.Kind() {
 	case reflect.String:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = int64(len(st.String())) > p
 	case reflect.Slice, reflect.Map, reflect.Array:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = int64(st.Len()) > p
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		p, err := asInt(param)
+		p, err := asInt(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = st.Int() > p
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		p, err := asUint(param)
+		p, err := asUint(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
 		invalid = st.Uint() > p
 	case reflect.Float32, reflect.Float64:
-		p, err := asFloat(param)
+		p, err := asFloat(param["0"])
 		if err != nil {
 			return ErrBadParameter
 		}
@@ -198,13 +197,13 @@ func max(v interface{}, param string) error {
 
 // regex is the builtin validation function that checks
 // whether the string variable matches a regular expression
-func regex(v interface{}, param string) error {
+func regex(v interface{}, param map[string]string) error {
 	s, ok := v.(string)
 	if !ok {
 		return ErrUnsupported
 	}
 
-	re, err := regexp.Compile(param)
+	re, err := regexp.Compile(param["0"])
 	if err != nil {
 		return ErrBadParameter
 	}

@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sort"
 
-	"gopkg.in/validator.v2"
+	"gopkg.in/mgutz/validator.v2"
 )
 
 // This example demonstrates a custom function to process template text.
@@ -30,10 +30,10 @@ func ExampleValidate() {
 	// First create a struct to be validated
 	// according to the validator tags.
 	type ValidateExample struct {
-		Name        string `validate:"nonzero"`
+		Name        string `validate:"nonzero" json:"name"`
 		Description string
-		Age         int    `validate:"min=18"`
-		Email       string `validate:"regexp=^[0-9a-z]+@[0-9a-z]+(\\.[0-9a-z]+)+$"`
+		Age         int    `validate:"min?18"`
+		Email       string `validate:"regexp?^[0-9a-z]+@[0-9a-z]+(\\.[0-9a-z]+)+$"`
 		Address     struct {
 			Street string `validate:"nonzero"`
 			City   string `validate:"nonzero"`
@@ -91,7 +91,7 @@ func ExampleValidate() {
 // This example shows how to use the Valid helper
 // function to validator any number of values
 func ExampleValid() {
-	err := validator.Valid(42, "min=10,max=100,nonzero")
+	err := validator.Valid(42, "min?10,max?100,nonzero")
 	fmt.Printf("42: valid=%v, errs=%v\n", err == nil, err)
 
 	var ptr *int
@@ -99,7 +99,7 @@ func ExampleValid() {
 		fmt.Println("ptr: Invalid nil pointer.")
 	}
 
-	err = validator.Valid("ABBA", "regexp=[ABC]*")
+	err = validator.Valid("ABBA", "regexp?[ABC]*")
 	fmt.Printf("ABBA: valid=%v\n", err == nil)
 
 	// Output:
@@ -111,7 +111,7 @@ func ExampleValid() {
 // This example shows you how to change the tag name
 func ExampleSetTag() {
 	type T struct {
-		A int `foo:"nonzero" bar:"min=10"`
+		A int `foo:"nonzero" bar:"min?10"`
 	}
 	t := T{5}
 	v := validator.NewValidator()
@@ -131,7 +131,7 @@ func ExampleSetTag() {
 // This example shows you how to change the tag name
 func ExampleWithTag() {
 	type T struct {
-		A int `foo:"nonzero" bar:"min=10"`
+		A int `foo:"nonzero" bar:"min?10"`
 	}
 	t := T{5}
 	err := validator.WithTag("foo").Validate(t)

@@ -13,16 +13,32 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
 package validator
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode"
 )
+
+// ReadJSONTag indicates whether to use json tags for map key names
+var ReadJSONTag = false
+
+// Ampersand escape sequence
+const Ampersand = "%26"
+
+// Comma escape sequence
+const Comma = "%2C"
+
+// Equals escape sequence
+const Equals = "%3D"
+
+// Percent escape sequence
+const Percent = "%25"
 
 // TextErr is an error that also implements the TextMarshaller interface for
 // serializing out to various plain text encodings. Packages creating their
@@ -87,6 +103,17 @@ func (err ErrorMap) Error() string {
 	return ""
 }
 
+// // MarshalJSON ...
+// func (err ErrorMap) MarshalJSON() ([]byte, error) {
+
+// 	return nil, nil
+// }
+
+// // UnmarshalJSON ...
+// func (err ErrorMap) UnmarshalJSON(data []byte) error {
+// 	return nil
+// }
+
 // ErrorArray is a slice of errors returned by the Validate function.
 type ErrorArray []error
 
@@ -99,9 +126,24 @@ func (err ErrorArray) Error() string {
 	return ""
 }
 
+// MarshalJSON ...
+func (err ErrorArray) MarshalJSON() ([]byte, error) {
+	var result []string
+
+	if len(err) > 0 {
+		result = make([]string, len(err))
+		for i, er := range err {
+			result[i] = er.Error()
+		}
+		return json.Marshal(result)
+	}
+
+	return nil, nil
+}
+
 // ValidationFunc is a function that receives the value of a
 // field and a parameter used for the respective validation tag.
-type ValidationFunc func(v interface{}, param string) error
+type ValidationFunc func(v interface{}, param map[string]string) error
 
 // Validator implements a validator
 type Validator struct {
@@ -219,6 +261,15 @@ func (mv *Validator) Validate(v interface{}) error {
 			continue
 		}
 		fname := st.Field(i).Name
+		if ReadJSONTag {
+			tag := st.Field(i).Tag.Get("json")
+			if tag == "-" {
+				continue
+			}
+			if tag != "" && tag != "omitempty" {
+				fname = tag
+			}
+		}
 		var errs ErrorArray
 
 		if tag != "" {
@@ -243,7 +294,7 @@ func (mv *Validator) Validate(v interface{}) error {
 			}
 		}
 		if len(errs) > 0 {
-			m[st.Field(i).Name] = errs
+			m[fname] = errs
 		}
 	}
 	if len(m) > 0 {
@@ -287,8 +338,12 @@ func (mv *Validator) validateVar(v interface{}, tag string) error {
 	}
 	errs := make(ErrorArray, 0, len(tags))
 	for _, t := range tags {
-		if err := t.Fn(v, t.Param); err != nil {
-			errs = append(errs, err)
+		if err := t.Fn(v, t.Params); err != nil {
+			if t.CustomError != nil {
+				errs = append(errs, t.CustomError)
+			} else {
+				errs = append(errs, err)
+			}
 		}
 	}
 	if len(errs) > 0 {
@@ -299,24 +354,37 @@ func (mv *Validator) validateVar(v interface{}, tag string) error {
 
 // tag represents one of the tag items
 type tag struct {
-	Name  string         // name of the tag
-	Fn    ValidationFunc // validation function to call
-	Param string         // parameter to send to the validation function
+	Name        string            // name of the tag
+	Fn          ValidationFunc    // validation function to call
+	Param       string            // parameter to send to the validation function
+	CustomError error             // custom error message
+	Params      map[string]string // parsed params
 }
+
+// TagDelimiter is the delimiter used to separate validation functions in a struct
+// tag
+var TagDelimiter = ","
+
+// sample struct tag with tagDelimiter = "\0"
+//   valid:"required?asdfasdf&err=custom error message\0min?3\0max?4"
 
 // parseTags parses all individual tags found within a struct tag.
 func (mv *Validator) parseTags(t string) ([]tag, error) {
-	tl := strings.Split(t, ",")
+	tl := strings.Split(t, TagDelimiter)
 	tags := make([]tag, 0, len(tl))
 	for _, i := range tl {
 		tg := tag{}
-		v := strings.SplitN(i, "=", 2)
+		v := strings.SplitN(i, "?", 2)
 		tg.Name = strings.Trim(v[0], " ")
 		if tg.Name == "" {
 			return []tag{}, ErrUnknownTag
 		}
 		if len(v) > 1 {
 			tg.Param = strings.Trim(v[1], " ")
+			tg.Params = parseParam(v[1])
+			if s, ok := tg.Params["err"]; ok {
+				tg.CustomError = errors.New(s)
+			}
 		}
 		var found bool
 		if tg.Fn, found = mv.validationFuncs[tg.Name]; !found {
@@ -326,4 +394,40 @@ func (mv *Validator) parseTags(t string) ([]tag, error) {
 
 	}
 	return tags, nil
+}
+
+func replaceSpecial(s string) string {
+	if strings.Contains(s, Ampersand) {
+		s = strings.Replace(s, Ampersand, "&", -1)
+	}
+	if strings.Contains(s, Percent) {
+		s = strings.Replace(s, Percent, "%", -1)
+	}
+	if strings.Contains(s, Equals) {
+		s = strings.Replace(s, Equals, "=", -1)
+	}
+	if strings.Contains(s, Comma) {
+		s = strings.Replace(s, Comma, ",", -1)
+	}
+	return s
+}
+
+// parseParam parses a string for params with optional names. Similar to
+// querystring with optional names.
+//
+// For example, "
+func parseParam(param string) map[string]string {
+	result := map[string]string{}
+	parts := strings.Split(param, "&")
+	i := 0
+	for _, part := range parts {
+		equalsIndex := strings.Index(part, "=")
+		if equalsIndex > 0 {
+			result[part[:equalsIndex]] = replaceSpecial(part[equalsIndex+1:])
+		} else {
+			result[strconv.Itoa(i)] = replaceSpecial(part)
+			i++
+		}
+	}
+	return result
 }
